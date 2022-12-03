@@ -7,7 +7,7 @@ app.use(express.json());
 
 const customers = [];
 
-// Middlewares
+// middlewares
 function verifyIfExistsAccount(req, res, next) {
   const { cpf } = req.headers;
 
@@ -17,12 +17,13 @@ function verifyIfExistsAccount(req, res, next) {
     return res.status(400).json({ error: 'There is no account registered with this CPF :(' });
   }
 
-  // Forward the data to the routes
+  // forward the data to the routes
   req.customer = customer;
 
   return next();
 }
 
+// functions
 function getBalance(statement) {
   const balance = statement.reduce((acc, operation) => {
     if (operation.type === 'credit') {
@@ -35,6 +36,7 @@ function getBalance(statement) {
   return balance;
 }
 
+// routes
 app.post('/account', (req, res) => {
   const { name, cpf } = req.body;
 
@@ -58,15 +60,52 @@ app.post('/account', (req, res) => {
   }
 });
 
+app.put('/account', verifyIfExistsAccount, (req, res) => {
+  const { customer } = req;
+  const { name } = req.body;
+
+  customer.name = name;
+
+  return res.status(201).json({ message: 'Updated account successfully :)' });
+});
+
+app.get('/account', verifyIfExistsAccount, (req, res) => {
+  const { customer } = req;
+
+  return res.json(customer);
+});
+
+app.delete('/account', verifyIfExistsAccount, (req, res) => {
+  const { customer } = req;
+
+  customers.splice(customer, 1);
+
+  return res.status(200).json({ message: 'Account deleted successfully :(' });
+});
+
 app.get('/statement', verifyIfExistsAccount, (req, res) => {
   const { customer } = req;
 
   return res.json({ statement: customer.statement });
 });
 
-app.post('/deposit', verifyIfExistsAccount, (req, res) => {
-  const { amount, description } = req.body;
+app.get('/statement/date', verifyIfExistsAccount, (req, res) => {
   const { customer } = req;
+  const { date } = req.query;
+
+  // hack to get any time from a date
+  const dateFormated = new Date(date + ' 00:00');
+
+  const statement = customer.statement.filter(
+    (operation) => operation.created_at.toDateString() === dateFormated.toDateString()
+  );
+
+  return res.json(statement);
+});
+
+app.post('/deposit', verifyIfExistsAccount, (req, res) => {
+  const { customer } = req;
+  const { amount, description } = req.body;
 
   const statementOperation = {
     amount,
@@ -81,13 +120,13 @@ app.post('/deposit', verifyIfExistsAccount, (req, res) => {
 });
 
 app.post('/withdraw', verifyIfExistsAccount, (req, res) => {
-  const { amount } = req.body;
   const { customer } = req;
+  const { amount } = req.body;
 
   const balance = getBalance(customer.statement);
 
   if (balance < amount) {
-    return res.status(400).json({error: 'Insufficient balance :('})
+    return res.status(400).json({ error: 'Insufficient balance :(' });
   }
 
   const statementOperation = {
@@ -99,6 +138,14 @@ app.post('/withdraw', verifyIfExistsAccount, (req, res) => {
   customer.statement.push(statementOperation);
 
   return res.status(201).json({ message: 'Amount withdrawed successfully :)' });
+});
+
+app.get('/balance', verifyIfExistsAccount, (req, res) => {
+  const { customer } = req;
+
+  const balance = getBalance(customer.statement);
+
+  return res.json({ balance });
 });
 
 app.listen(3333, () => {
